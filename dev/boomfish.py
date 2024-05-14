@@ -1,135 +1,75 @@
 # -*- coding: UTF-8 -*-
-import os
 import sys
 import threading
 import time
-import chardet
-import re
-import numpy as np
-import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 import pystray
-# import win32api
-# import win32con
 from PIL import Image
 from pymsgbox import prompt
 from pystray import MenuItem
- 
-def get_resource_path(relative_path):
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+from tools import get_resource_path
+from segment_text import segment_text
+from export_session import export_session
+import threading
+from functools import partial
 
-def save_to_xlsx(df, filepath, sheet_name):
-    try:
-        with pd.ExcelWriter(filepath, engine='openpyxl', mode='a') as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-        outfile = filepath
-    except:
-        postfix = filepath.split('.')[-1]
-        outfile = filepath.replace(f'.{postfix}', 'out.xlsx')
-        with pd.ExcelWriter(outfile, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-    return f'表格已保存至 “{outfile}”，表名为 “{sheet_name}”'
+SEGMENT = 1
+EXPORT  = 2
+    
+def browse_file(process_type, window, progress_bar, item_text, val, chekcbox_var): # , val, label
+    message = '未选中文件'
+    if process_type == EXPORT:
+        file_type = 'Excel Files'
+        file_ext = 'xlsx'
+        func = export_session
+    elif process_type == SEGMENT:
+        file_type = 'txt Files'
+        file_ext = 'txt'
+        func = segment_text
+        
+    filepaths = filedialog.askopenfilenames(filetypes=[(file_type, '*.' + file_ext)])
+    total_files = len(filepaths)
+    progress_bar.config(maximum=100) 
 
-def export_chuchang(filepath):
-    # 读入表格
-    text_df = pd.read_excel(filepath, sheet_name="正文表")[['集数', '标题', '角色', '正文']] # 集数，标题，角色，正文
-    characters_df = pd.read_excel(filepath, sheet_name="角色表")[['角色', '主播', '性别', '年龄', '人设']] # 角色，主播，性别，年龄，人设
-    text_df.dropna(how='all', inplace=True)
-    text_df.fillna(method='ffill', inplace=True)
-    text_count_df = text_df.groupby(['集数', '标题', '角色']).count().reset_index()[['集数', '标题', '角色', '正文']]
-
-    # 合并表格
-    merged_df = pd.merge(characters_df, text_count_df, on='角色')
-    merged_df.rename(columns={'正文': '句数'}, inplace=True)
-    merged_df = merged_df.reindex(columns=['集数', '标题', '角色', '主播', '性别', '年龄', '人设', '句数'])
-
-    # 自定义排序序列
-    custom_order = dict(zip(characters_df['角色'], range(len(characters_df['角色']))))
-    merged_df['角色'] = pd.Categorical(merged_df['角色'], categories=custom_order, ordered=True)
-    merged_df = merged_df.sort_values(by=['集数', '角色'])
-
-    # 保存表格
-    xls = pd.ExcelFile(filepath)
-    sheet_name = "出场表"
-    new_id = 1
-    while sheet_name in xls.sheet_names:
-        sheet_name = f'出场表_{new_id}'
-        new_id += 1
-    return save_to_xlsx(merged_df, filepath, sheet_name)
-
-def read_file(file_name):
-        with open(file_name, 'rb') as f:
-            result = chardet.detect(f.read())
-            encoding = result['encoding']
-        file_=open(file_name, 'r', encoding=encoding, errors='ignore')
-        str_list = file_.read().splitlines()
-        file_.close()
-        return str_list
-
-def export_zhengwen(filepath):
-    lines = read_file(filepath)
-    lines = list(filter(lambda x: len(x)>0, lines))
-
-    # 找到标题
-    global title_pattern
-    pattern = title_pattern
-    titles = list(filter(lambda x: len(re.findall(title_pattern, x))==1, lines))
-
-    # 构建df
-    df = pd.DataFrame(lines, columns=['正文'])
-    df['集数'] = np.nan
-    df['标题'] = np.nan
-    df['角色'] = ''
-    df.loc[df['正文'].isin(titles), '集数'] = df.loc[df['正文'].isin(titles), '正文'].apply(lambda x: f'第{re.findall(pattern, x)[0][1]}章')
-    df.loc[df['正文'].isin(titles), '标题'] = df.loc[df['正文'].isin(titles), '正文'].apply(lambda x: re.findall(pattern, x)[0][2].strip())
-    df.fillna(method='ffill', inplace=True)
-    df = df.reindex(columns=['集数', '标题', '角色', '正文'])
-
-    # 根据索引去除这些行
-    df = df[~df['正文'].isin(titles)]
-    return save_to_xlsx(df, filepath, '正文白表')
-
-def browse_file():
-    global process_type
-    message = ''
-    if process_type == 'chuchuang':
-        filepath = filedialog.askopenfilename(filetypes=[('Excel Files', '*.xlsx')])
-        if filepath: message = export_chuchang(filepath)
-    elif process_type == 'zhengwen':
-        filepath = filedialog.askopenfilename(filetypes=[('text Files', '*.txt')])
-        if filepath: message = export_zhengwen(filepath)
-    if len(message):
-        messagebox.showinfo("整好了", message)
+    progress_value = 0
+    messages = []
+    for i,filepath in enumerate(filepaths, start=1):
+        message = func(filepath, chekcbox_var=chekcbox_var.get())
+        messages.append(message)
+        progress_value = int(100.0*i / total_files)
+        progress_bar['value'] = progress_value  # 更新进度值
+        val.set(f'{item_text}进度: {progress_value}%')
+        window.update()  # 更新 GUI
+    if total_files > 0:
+        messagebox.showinfo("整好了", '\n'.join(messages))
     else:
-        messagebox.showinfo("没整好", message)
-
+        messagebox.showinfo("没整好", '未选中文件')
+    
 def process(icon, item):
     # 创建主窗口
     window = tk.Tk()
-    
     window.title("蹦蹦炸弹")
-    window.geometry("300x100")
-
-    global process_type
-    if '养个鱼（正文白表）' in item.text:
-        process_type = 'zhengwen'
-        # # 创建按钮
-        # browse_button = tk.Button(window, text=item.text, command=browse_file)
-        # browse_button.pack(side=tk.LEFT, padx=10, pady=20)
-
-        # set_button = tk.Button(window, text='标题模式', command=set_title_pattern)
-        # set_button.pack(side=tk.RIGHT, padx=10, pady=20)
-    elif '炸个鱼（出场表）' in item.text:
-        process_type = 'chuchuang'
-    # 创建按钮
-    browse_button = tk.Button(window, text=item.text, command=browse_file)
+    window.geometry("300x160")
+    checkbox_var = tk.IntVar(window)
+    if '养个鱼（正文白表）' == item.text:
+        process_type = SEGMENT
+        checkbox_var.set(0)
+        checkbox = ttk.Checkbutton(window, text="颜色标记（处理速度很慢，建议在Excel里标记）", variable=checkbox_var)
+        checkbox.pack()
+        pro_text = '养鱼'
+    elif '炸个鱼（出场表）' == item.text:
+        process_type = EXPORT
+        pro_text = '炸鱼'
+    progress_bar = ttk.Progressbar(window, length=100, mode='determinate')
+    progress_bar.pack()
+    val = tk.StringVar(window)
+    val.set(f'{pro_text}进度: 0%')
+    label = tk.Label(window, textvariable=val)
+    label.pack(padx=10, pady=10)
+    browse_button = tk.Button(window, text='选择文件', command=partial(browse_file,process_type, window, progress_bar, pro_text, val, checkbox_var)) # , label
     browse_button.pack(pady=20, padx=10)
-
-    # 运行主循环
     window.mainloop()
 
 # def set_title_pattern():
@@ -169,6 +109,5 @@ def main():
 if __name__ == "__main__":
     print('start')
     is_exit = False
-    process_type = 'chuchang'
     title_pattern = r"^##(.*)第\s*(\d+)\s*章\s*(.*)$"
     main()
