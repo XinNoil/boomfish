@@ -70,6 +70,7 @@ def process(icon, item):
     label.pack(padx=10, pady=10)
     browse_button = tk.Button(window, text='选择文件', command=partial(browse_file,process_type, window, progress_bar, pro_text, val, checkbox_var)) # , label
     browse_button.pack(pady=20, padx=10)
+    window.focus_force()
     window.mainloop()
 
 # def set_title_pattern():
