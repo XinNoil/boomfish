@@ -17,6 +17,11 @@ from functools import partial
 
 SEGMENT = 1
 EXPORT  = 2
+
+def update_progress(window, progress_bar, val, item_text, total_files, progress_value):
+    progress_bar['value'] = progress_value  # 更新进度值
+    val.set(f'{item_text}进度: {progress_value}/{total_files}')
+    window.update()  # 更新 GUI
     
 def browse_file(process_type, window, progress_bar, item_text, val, chekcbox_var): # , val, label
     message = '未选中文件'
@@ -31,17 +36,12 @@ def browse_file(process_type, window, progress_bar, item_text, val, chekcbox_var
         
     filepaths = filedialog.askopenfilenames(filetypes=[(file_type, '*.' + file_ext)])
     total_files = len(filepaths)
-    progress_bar.config(maximum=100) 
-
-    progress_value = 0
+    progress_bar.config(maximum=total_files) 
+    update_progress(window, progress_bar, val, item_text, total_files, 0)
     messages = []
     for i,filepath in enumerate(filepaths, start=1):
-        message = func(filepath, chekcbox_var=chekcbox_var.get())
-        messages.append(message)
-        progress_value = int(100.0*i / total_files)
-        progress_bar['value'] = progress_value  # 更新进度值
-        val.set(f'{item_text}进度: {progress_value}%')
-        window.update()  # 更新 GUI
+        messages.append(func(filepath, chekcbox_var=chekcbox_var.get()))
+        update_progress(window, progress_bar, val, item_text, total_files, i)
     if total_files > 0:
         messagebox.showinfo("整好了", '\n'.join(messages))
     else:
@@ -65,7 +65,7 @@ def process(icon, item):
     progress_bar = ttk.Progressbar(window, length=100, mode='determinate')
     progress_bar.pack()
     val = tk.StringVar(window)
-    val.set(f'{pro_text}进度: 0%')
+    val.set(f'{pro_text}吗？')
     label = tk.Label(window, textvariable=val)
     label.pack(padx=10, pady=10)
     browse_button = tk.Button(window, text='选择文件', command=partial(browse_file,process_type, window, progress_bar, pro_text, val, checkbox_var)) # , label
