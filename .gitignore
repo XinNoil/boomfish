@@ -4,4 +4,5 @@
 *.txt
 *.docx
 dev/build
+LLM
 __pycache__/
