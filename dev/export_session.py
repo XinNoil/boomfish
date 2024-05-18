@@ -2,7 +2,7 @@ import os, argparse
 import pandas as pd
 from tools import get_sheet_name, save_to_xlsx
 
-def export_session(filepath, sheet_name = "出场表", chekcbox_var=None):
+def export_session(filepath, sheet_name = "出场表", **kwargs):
     # 读入表格
     text_df = pd.read_excel(filepath, sheet_name="正文表")[['集数', '标题', '角色', '正文']] # 集数，标题，角色，正文
     characters_df = pd.read_excel(filepath, sheet_name="角色表")[['角色', '主播', '性别', '年龄', '人设']] # 角色，主播，性别，年龄，人设
